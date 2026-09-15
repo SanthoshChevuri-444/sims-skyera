@@ -273,7 +273,7 @@
         <h1>SKYERA</h1>
         <span class="uav-tag">UAV-01</span>
       </div>
-      <p class="subtitle">3D DISASTER DRONE SIMULATION · PHASE 1</p>
+      <p class="subtitle">URBAN SECTOR 7 · LOCAL SIM · HITL GCS</p>
 
       <!-- Flight Telemetry -->
       <div class="section-label">Flight Telemetry</div>
@@ -303,6 +303,21 @@
       <div class="telemetry-card" style="grid-column: span 2;">
         <span class="telemetry-label">POSITION (X, Y, Z) · HEADING</span>
         <span class="telemetry-value" id="tele-pos" style="font-size: 13px;">0.0, 0.0, 0.0 · 0°</span>
+      </div>
+
+      <div class="section-label">Sensor / Detection</div>
+      <div class="telemetry-grid">
+        <div class="telemetry-card">
+          <span class="telemetry-label">FOOTPRINT</span>
+          <span class="telemetry-value" id="tele-sensor">0.0 m</span>
+        </div>
+        <div class="telemetry-card">
+          <span class="telemetry-label">CONTACTS</span>
+          <span class="telemetry-value" id="tele-contacts">0 / 4</span>
+        </div>
+      </div>
+      <div class="telemetry-card" id="tele-contacts-list" style="font-size: 11px; color: var(--muted); min-height: 48px;">
+        NO CONTACTS — ARM AND PATROL TO SCAN
       </div>
 
       <!-- Flight Actions -->

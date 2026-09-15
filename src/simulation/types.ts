@@ -27,6 +27,8 @@ export type FlightMode =
   | "NAVIGATING"
   | "LANDING";
 
+import type { SurvivorPriority } from "../domain/types";
+
 export interface DroneState {
   readonly position: Vec3;
   readonly velocity: Vec3;
@@ -38,10 +40,43 @@ export interface DroneState {
   readonly flightMode: FlightMode;
   readonly targetPosition: Vec3 | null;
   readonly batteryPercent: number;
+  /** Downward sensor scanner properties */
+  readonly sensorFovDegrees: number;
+  readonly sensorGroundRadius: number;
+  readonly anomalyDetectedCount: number;
+}
+
+export interface SurvivorEntity {
+  readonly id: string;
+  readonly name: string;
+  readonly position: Vec3;
+  readonly detected: boolean;
+  readonly detectedAtTick: number | null;
+  readonly vitalSigns: {
+    readonly heartRateBpm: number;
+    readonly temperatureC: number;
+    readonly conscious: boolean;
+  };
+  readonly priority: SurvivorPriority;
+  readonly hazardProximityMeters: number;
+}
+
+export interface HazardZone {
+  readonly id: string;
+  readonly kind: "FIRE" | "FLOOD" | "COLLAPSE";
+  readonly center: { readonly x: number; readonly z: number };
+  readonly radius: number;
+  readonly severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  readonly description: string;
+}
+
+export interface StagingBase {
+  readonly position: Vec3;
+  readonly radius: number;
 }
 
 /**
- * Placeholder world snapshot. Disaster content arrives in later phases.
+ * World snapshot containing disaster environment, hazards, and survivors.
  */
 export interface WorldState {
   readonly scenarioId: string | null;
@@ -51,6 +86,9 @@ export interface WorldState {
     readonly minZ: number;
     readonly maxZ: number;
   };
+  readonly survivors: ReadonlyArray<SurvivorEntity>;
+  readonly hazards: ReadonlyArray<HazardZone>;
+  readonly stagingBase: StagingBase;
 }
 
 /**

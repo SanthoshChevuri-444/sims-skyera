@@ -1,5 +1,6 @@
 import {
   AmbientLight,
+  BufferAttribute,
   BufferGeometry,
   Color,
   DirectionalLight,
@@ -14,6 +15,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { SimulationSnapshot } from "../simulation/types";
+import { createDisasterEnvironment } from "./disasterEnvironment";
 import { createDroneMesh } from "./droneMesh";
 
 export interface PresentationHandle {
@@ -80,15 +82,18 @@ export function mountPresentation(
   fineGrid.position.y = -0.01;
   scene.add(fineGrid);
 
-  // 3D Quadcopter Mesh
+  const disasterEnvironment = createDisasterEnvironment();
+  scene.add(disasterEnvironment.root);
+
   const droneVisual = createDroneMesh();
   scene.add(droneVisual.root);
 
-  // Flight path trail line
   const MAX_TRAIL_POINTS = 600;
   const trailPositions = new Float32Array(MAX_TRAIL_POINTS * 3);
   let trailCount = 0;
   const trailGeometry = new BufferGeometry();
+  trailGeometry.setAttribute("position", new BufferAttribute(trailPositions, 3));
+  trailGeometry.setDrawRange(0, 0);
   const trailMaterial = new LineBasicMaterial({
     color: 0x38bdf8,
     transparent: true,
@@ -101,8 +106,8 @@ export function mountPresentation(
   let lastTrailRecordTime = 0;
 
   const rendererStatus = document.querySelector("#status-renderer");
-  if (rendererStatus) {
-    rendererStatus.textContent = "ONLINE (3D DRONE)";
+    if (rendererStatus) {
+    rendererStatus.textContent = "ONLINE (DISASTER SECTOR)";
     rendererStatus.classList.remove("status-idle");
     rendererStatus.classList.add("status-ok");
   }
@@ -131,8 +136,8 @@ export function mountPresentation(
     if (getSnapshot) {
       const snap = getSnapshot();
       droneVisual.update(snap.drone, delta);
+      disasterEnvironment.update(snap.world, delta);
 
-      // Smooth camera follow target
       const targetPos = new Vector3(
         snap.drone.position.x,
         Math.max(1, snap.drone.position.y * 0.7),
@@ -140,7 +145,6 @@ export function mountPresentation(
       );
       controls.target.lerp(targetPos, 0.04);
 
-      // Record flight breadcrumb points
       if (snap.drone.position.y > 0.1 && time - lastTrailRecordTime > 80) {
         lastTrailRecordTime = time;
         if (trailCount < MAX_TRAIL_POINTS) {
@@ -148,17 +152,10 @@ export function mountPresentation(
           trailPositions[trailCount * 3 + 1] = snap.drone.position.y;
           trailPositions[trailCount * 3 + 2] = snap.drone.position.z;
           trailCount++;
-          trailGeometry.setAttribute(
-            "position",
-            new BufferGeometry().setAttribute(
-              "position",
-              new (window as any).Float32Array(
-                trailPositions.buffer,
-                0,
-                trailCount * 3,
-              ),
-            ).attributes.position,
-          );
+          const positionAttr = trailGeometry.getAttribute("position");
+          positionAttr.needsUpdate = true;
+          trailGeometry.setDrawRange(0, trailCount);
+          trailGeometry.computeBoundingSphere();
         }
       }
     }
@@ -176,6 +173,7 @@ export function mountPresentation(
       window.removeEventListener("resize", onResize);
       controls.dispose();
       droneVisual.dispose();
+      disasterEnvironment.dispose();
       trailGeometry.dispose();
       trailMaterial.dispose();
       renderer.dispose();

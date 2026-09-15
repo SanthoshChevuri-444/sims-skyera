@@ -73,6 +73,9 @@ const teleSpeed = document.querySelector<HTMLElement>("#tele-speed");
 const teleBattery = document.querySelector<HTMLElement>("#tele-battery");
 const teleBatteryBar = document.querySelector<HTMLElement>("#tele-battery-bar");
 const telePos = document.querySelector<HTMLElement>("#tele-pos");
+const teleSensor = document.querySelector<HTMLElement>("#tele-sensor");
+const teleContacts = document.querySelector<HTMLElement>("#tele-contacts");
+const teleContactsList = document.querySelector<HTMLElement>("#tele-contacts-list");
 
 let lastUIUpdate = 0;
 
@@ -119,6 +122,27 @@ function updateTelemetryUI(): void {
       ((-drone.headingRadians * 180) / Math.PI + 360) % 360,
     );
     telePos.textContent = `X:${drone.position.x.toFixed(1)} Y:${drone.position.y.toFixed(1)} Z:${drone.position.z.toFixed(1)} · ${headingDeg}°`;
+  }
+
+  if (teleSensor) {
+    teleSensor.textContent = `${drone.sensorGroundRadius.toFixed(1)} m`;
+  }
+
+  const detected = snapshot.world.survivors.filter((s) => s.detected);
+  if (teleContacts) {
+    teleContacts.textContent = `${detected.length} / ${snapshot.world.survivors.length}`;
+  }
+  if (teleContactsList) {
+    if (detected.length === 0) {
+      teleContactsList.textContent = "NO CONTACTS — ARM AND PATROL TO SCAN";
+    } else {
+      teleContactsList.textContent = detected
+        .map(
+          (s) =>
+            `${s.id} ${s.priority} · ${s.vitalSigns.conscious ? "AWAKE" : "UNRESPONSIVE"}`,
+        )
+        .join("  |  ");
+    }
   }
 }
 
