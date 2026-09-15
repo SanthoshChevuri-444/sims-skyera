@@ -135,14 +135,21 @@ function updateTelemetryUI(): void {
   }
 
   const pending = snapshot.mission.cases.find((c) => c.status === "PENDING");
+  const btnApprove = document.querySelector<HTMLButtonElement>("#btn-approve");
   if (teleHitl) {
     if (snapshot.mission.inspect) {
       teleHitl.textContent = `INSPECTING ${snapshot.mission.inspect.survivorId} · RGB+THERMAL HOLD`;
+      teleHitl.classList.remove("hitl-active-alert");
+      btnApprove?.classList.remove("btn-pulse");
     } else if (!pending) {
       teleHitl.textContent =
         "NO PENDING CASE — AI RECOMMENDS ONLY; HUMAN APPROVES";
+      teleHitl.classList.remove("hitl-active-alert");
+      btnApprove?.classList.remove("btn-pulse");
     } else {
-      teleHitl.textContent = `${pending.survivorId} ${pending.report.priority} PENDING · ${pending.report.rationale}`;
+      teleHitl.textContent = `⚠️ ACTION REQUIRED: ${pending.survivorId} (${pending.report.priority}) PENDING APPROVAL · ${pending.report.rationale}`;
+      teleHitl.classList.add("hitl-active-alert");
+      btnApprove?.classList.add("btn-pulse");
     }
   }
 }

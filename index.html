@@ -263,12 +263,87 @@
         background: rgba(56, 189, 248, 0.15);
       }
 
+      /* HITL Alert Animations */
+      .hitl-active-alert {
+        border-color: var(--warn) !important;
+        background: rgba(251, 191, 36, 0.15) !important;
+        color: #fff !important;
+        box-shadow: 0 0 16px rgba(251, 191, 36, 0.3);
+        animation: pulseBorder 1.2s infinite alternate ease-in-out;
+      }
+
+      .btn-pulse {
+        border-color: var(--ok) !important;
+        background: rgba(52, 211, 153, 0.35) !important;
+        box-shadow: 0 0 14px rgba(52, 211, 153, 0.5) !important;
+        animation: pulseButton 1s infinite alternate ease-in-out;
+      }
+
+      @keyframes pulseBorder {
+        from { border-color: rgba(251, 191, 36, 0.3); }
+        to { border-color: rgba(251, 191, 36, 1); }
+      }
+
+      @keyframes pulseButton {
+        from { transform: scale(1); }
+        to { transform: scale(1.02); }
+      }
+
+      /* Tactical Map Legend */
+      #map-legend {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        z-index: 10;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(12px);
+        padding: 12px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+      }
+
+      .legend-title {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text);
+      }
+
+      .legend-swatch {
+        width: 14px;
+        height: 4px;
+        border-radius: 1px;
+      }
+
       canvas {
         display: block;
       }
     </style>
   </head>
   <body>
+    <!-- Tactical Map Legend -->
+    <aside id="map-legend" aria-label="Tactical Map Legend">
+      <div class="legend-title">TACTICAL MAP LEGEND</div>
+      <div class="legend-item"><span class="legend-swatch" style="background: #fbbf24;"></span> UAV Search Grid</div>
+      <div class="legend-item"><span class="legend-swatch" style="background: #f97316;"></span> Rescue Ingress Path</div>
+      <div class="legend-item"><span class="legend-swatch" style="background: #34d399;"></span> Evacuation Exit Route</div>
+      <div class="legend-item"><span class="legend-swatch" style="background: #ef4444;"></span> Fire / Chemical Hazard</div>
+      <div class="legend-item"><span class="legend-swatch" style="background: #0284c7;"></span> Flood / Water Hazard</div>
+    </aside>
+
     <!-- Ground Control Station Overlay -->
     <aside id="gcs-panel" aria-label="SKYERA Ground Control Station">
       <div class="header-title">
