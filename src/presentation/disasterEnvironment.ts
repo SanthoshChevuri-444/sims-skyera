@@ -95,6 +95,24 @@ export function createDisasterEnvironment(): DisasterEnvironmentHandle {
   hCross.position.set(0, 0.03, 0);
   stagingGroup.add(hCross);
 
+  const evacGroup = new Group();
+  root.add(evacGroup);
+  const evacRing = new Mesh(
+    new RingGeometry(3.2, 3.6, 40),
+    new MeshBasicMaterial({ color: 0x34d399, side: DoubleSide }),
+  );
+  evacRing.rotation.x = -Math.PI / 2;
+  evacRing.position.y = 0.03;
+  evacGroup.add(evacRing);
+  const evacDisc = new Mesh(
+    new CircleGeometry(3.2, 28),
+    new MeshStandardMaterial({ color: 0x052e1a, roughness: 0.7 }),
+  );
+  evacDisc.rotation.x = -Math.PI / 2;
+  evacDisc.position.y = 0.02;
+  evacGroup.add(evacDisc);
+  let evacPlaced = false;
+
   const buildingsGroup = new Group();
   root.add(buildingsGroup);
 
@@ -339,6 +357,11 @@ export function createDisasterEnvironment(): DisasterEnvironmentHandle {
     root,
     update: (world: WorldState, delta: number) => {
       pulseTimer += delta;
+
+      if (!evacPlaced) {
+        evacGroup.position.set(world.evacuationZone.x, 0, world.evacuationZone.z);
+        evacPlaced = true;
+      }
 
       world.hazards.forEach((hazard) => {
         if (!hazardVisuals.has(hazard.id)) {

@@ -6,9 +6,7 @@
 import { createLocalSimulationAdapter } from "./adapters/local/localSimulationAdapter";
 import { mountPresentation } from "./presentation/mountPresentation";
 import { createSimulationCore } from "./simulation/createSimulationCore";
-import type { Vec3 } from "./simulation/types";
 
-// 1. Initialize decoupled architecture layers
 const adapter = createLocalSimulationAdapter();
 const core = createSimulationCore(adapter);
 
@@ -17,10 +15,8 @@ if (!host) {
   throw new Error("Missing #app host element");
 }
 
-// 2. Mount 3D Presentation with snapshot provider
 const presentation = mountPresentation(host, () => core.getSnapshot());
 
-// 3. Deterministic 60 Hz simulation clock ticker (fixed timestep accumulator)
 const FIXED_STEP_SEC = 1 / 60;
 let lastSimTime = performance.now();
 let accumulator = 0;
@@ -35,38 +31,11 @@ function runSimulationLoop(currentTime: number): void {
     accumulator -= FIXED_STEP_SEC;
   }
 
-  updatePatrolSequence();
   updateTelemetryUI();
-
   requestAnimationFrame(runSimulationLoop);
 }
 requestAnimationFrame(runSimulationLoop);
 
-// 4. Autonomous Patrol Waypoints Queue
-const PATROL_ROUTE: ReadonlyArray<Vec3> = [
-  { x: 18, y: 8, z: 18 },
-  { x: -18, y: 10, z: 18 },
-  { x: -18, y: 8, z: -18 },
-  { x: 18, y: 10, z: -18 },
-  { x: 0, y: 8, z: 0 },
-];
-let isPatrolling = false;
-let currentWaypointIdx = 0;
-
-function updatePatrolSequence(): void {
-  if (!isPatrolling) return;
-
-  const snapshot = core.getSnapshot();
-  const drone = snapshot.drone;
-
-  if (drone.flightMode === "HOVER" || !drone.targetPosition) {
-    currentWaypointIdx = (currentWaypointIdx + 1) % PATROL_ROUTE.length;
-    const nextWp = PATROL_ROUTE[currentWaypointIdx];
-    core.flyTo(nextWp);
-  }
-}
-
-// 5. GCS Telemetry UI Update
 const teleMode = document.querySelector<HTMLElement>("#tele-mode");
 const teleAlt = document.querySelector<HTMLElement>("#tele-alt");
 const teleSpeed = document.querySelector<HTMLElement>("#tele-speed");
@@ -76,12 +45,17 @@ const telePos = document.querySelector<HTMLElement>("#tele-pos");
 const teleSensor = document.querySelector<HTMLElement>("#tele-sensor");
 const teleContacts = document.querySelector<HTMLElement>("#tele-contacts");
 const teleContactsList = document.querySelector<HTMLElement>("#tele-contacts-list");
+const teleMission = document.querySelector<HTMLElement>("#tele-mission");
+const teleSearch = document.querySelector<HTMLElement>("#tele-search");
+const teleHitl = document.querySelector<HTMLElement>("#tele-hitl");
 
 let lastUIUpdate = 0;
 
 function updateTelemetryUI(): void {
   const now = performance.now();
-  if (now - lastUIUpdate < 50) return; // 20 FPS UI refresh rate
+  if (now - lastUIUpdate < 50) {
+    return;
+  }
   lastUIUpdate = now;
 
   const snapshot = core.getSnapshot();
@@ -134,39 +108,59 @@ function updateTelemetryUI(): void {
   }
   if (teleContactsList) {
     if (detected.length === 0) {
-      teleContactsList.textContent = "NO CONTACTS — ARM AND PATROL TO SCAN";
+      teleContactsList.textContent =
+        "NO CONTACTS — START GRID SEARCH TO SCAN";
     } else {
       teleContactsList.textContent = detected
         .map(
           (s) =>
-            `${s.id} ${s.priority} · ${s.vitalSigns.conscious ? "AWAKE" : "UNRESPONSIVE"}`,
+            `${s.id} ${s.priority} · ${s.operatorStatus} · ${s.vitalSigns.conscious ? "AWAKE" : "UNRESPONSIVE"}`,
         )
         .join("  |  ");
     }
   }
+
+  if (teleMission) {
+    teleMission.textContent = snapshot.mission.phase;
+  }
+
+  if (teleSearch) {
+    const search = snapshot.mission.search;
+    if (!search) {
+      teleSearch.textContent = "NOT ARMED";
+    } else {
+      const shown = Math.max(0, search.waypointIndex + 1);
+      teleSearch.textContent = `${search.pattern} ${shown}/${search.waypoints.length}${search.active ? "" : " · DONE"}`;
+    }
+  }
+
+  const pending = snapshot.mission.cases.find((c) => c.status === "PENDING");
+  if (teleHitl) {
+    if (snapshot.mission.inspect) {
+      teleHitl.textContent = `INSPECTING ${snapshot.mission.inspect.survivorId} · RGB+THERMAL HOLD`;
+    } else if (!pending) {
+      teleHitl.textContent =
+        "NO PENDING CASE — AI RECOMMENDS ONLY; HUMAN APPROVES";
+    } else {
+      teleHitl.textContent = `${pending.survivorId} ${pending.report.priority} PENDING · ${pending.report.rationale}`;
+    }
+  }
 }
 
-// 6. Bind Operator Flight Control Buttons
 const btnTakeoff = document.querySelector<HTMLButtonElement>("#btn-takeoff");
 btnTakeoff?.addEventListener("click", () => {
-  isPatrolling = false;
-  core.takeoff(8);
+  core.abortSearch();
+  core.takeoff();
 });
 
 const btnPatrol = document.querySelector<HTMLButtonElement>("#btn-patrol");
 btnPatrol?.addEventListener("click", () => {
-  const drone = core.getSnapshot().drone;
-  if (drone.position.y < 2) {
-    core.takeoff(8);
-  }
-  isPatrolling = true;
-  currentWaypointIdx = 0;
-  core.flyTo(PATROL_ROUTE[0]);
+  core.startGridSearch();
 });
 
 const btnLand = document.querySelector<HTMLButtonElement>("#btn-land");
 btnLand?.addEventListener("click", () => {
-  isPatrolling = false;
+  core.abortSearch();
   core.land();
 });
 
@@ -174,7 +168,7 @@ const btnArm = document.querySelector<HTMLButtonElement>("#btn-arm");
 btnArm?.addEventListener("click", () => {
   const drone = core.getSnapshot().drone;
   if (drone.armed) {
-    isPatrolling = false;
+    core.abortSearch();
     core.disarm();
   } else {
     core.arm();
@@ -184,4 +178,32 @@ btnArm?.addEventListener("click", () => {
 const btnResetCam = document.querySelector<HTMLButtonElement>("#btn-reset-cam");
 btnResetCam?.addEventListener("click", () => {
   presentation.resetCamera();
+});
+
+function pendingSurvivorId(): string | null {
+  return (
+    core.getSnapshot().mission.cases.find((c) => c.status === "PENDING")
+      ?.survivorId ?? null
+  );
+}
+
+document.querySelector<HTMLButtonElement>("#btn-approve")?.addEventListener("click", () => {
+  const id = pendingSurvivorId();
+  if (id) {
+    core.approveCase(id);
+  }
+});
+
+document.querySelector<HTMLButtonElement>("#btn-reject")?.addEventListener("click", () => {
+  const id = pendingSurvivorId();
+  if (id) {
+    core.rejectCase(id);
+  }
+});
+
+document.querySelector<HTMLButtonElement>("#btn-false-pos")?.addEventListener("click", () => {
+  const id = pendingSurvivorId();
+  if (id) {
+    core.markFalsePositive(id);
+  }
 });

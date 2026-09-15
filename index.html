@@ -52,6 +52,8 @@
         display: flex;
         flex-direction: column;
         gap: 14px;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
       }
 
       .header-title {
@@ -305,6 +307,18 @@
         <span class="telemetry-value" id="tele-pos" style="font-size: 13px;">0.0, 0.0, 0.0 · 0°</span>
       </div>
 
+      <div class="section-label">Mission / Search</div>
+      <div class="telemetry-grid">
+        <div class="telemetry-card">
+          <span class="telemetry-label">MISSION PHASE</span>
+          <span class="telemetry-value" id="tele-mission" style="font-size: 12px;">IDLE</span>
+        </div>
+        <div class="telemetry-card">
+          <span class="telemetry-label">GRID SEARCH</span>
+          <span class="telemetry-value" id="tele-search" style="font-size: 12px;">NOT ARMED</span>
+        </div>
+      </div>
+
       <div class="section-label">Sensor / Detection</div>
       <div class="telemetry-grid">
         <div class="telemetry-card">
@@ -317,14 +331,24 @@
         </div>
       </div>
       <div class="telemetry-card" id="tele-contacts-list" style="font-size: 11px; color: var(--muted); min-height: 48px;">
-        NO CONTACTS — ARM AND PATROL TO SCAN
+        NO CONTACTS — START GRID SEARCH TO SCAN
+      </div>
+
+      <div class="section-label">HITL — Human Decision</div>
+      <div class="telemetry-card" id="tele-hitl" style="font-size: 11px; color: var(--muted); min-height: 56px; line-height: 1.45;">
+        NO PENDING CASE — AI RECOMMENDS ONLY
+      </div>
+      <div class="actions-container">
+        <button class="btn btn-primary" id="btn-approve">✓ APPROVE ROUTES</button>
+        <button class="btn btn-danger" id="btn-reject">✕ REJECT</button>
+        <button class="btn" id="btn-false-pos" style="grid-column: span 2;">MARK FALSE POSITIVE</button>
       </div>
 
       <!-- Flight Actions -->
       <div class="section-label">Operator Flight Controls</div>
       <div class="actions-container">
         <button class="btn btn-primary" id="btn-takeoff">▲ TAKEOFF (8m)</button>
-        <button class="btn" id="btn-patrol">◈ PATROL WAYPOINTS</button>
+        <button class="btn" id="btn-patrol">◈ GRID SEARCH</button>
         <button class="btn" id="btn-land">▼ RETURN & LAND</button>
         <button class="btn btn-danger" id="btn-arm">⚡ ARM / DISARM</button>
       </div>

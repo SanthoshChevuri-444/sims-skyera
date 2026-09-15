@@ -27,7 +27,7 @@ export type FlightMode =
   | "NAVIGATING"
   | "LANDING";
 
-import type { SurvivorPriority } from "../domain/types";
+import type { HitlCase, OperatorCaseStatus, SurvivorPriority } from "../domain/types";
 
 export interface DroneState {
   readonly position: Vec3;
@@ -59,6 +59,8 @@ export interface SurvivorEntity {
   };
   readonly priority: SurvivorPriority;
   readonly hazardProximityMeters: number;
+  readonly inspected: boolean;
+  readonly operatorStatus: OperatorCaseStatus;
 }
 
 export interface HazardZone {
@@ -89,6 +91,7 @@ export interface WorldState {
   readonly survivors: ReadonlyArray<SurvivorEntity>;
   readonly hazards: ReadonlyArray<HazardZone>;
   readonly stagingBase: StagingBase;
+  readonly evacuationZone: { readonly x: number; readonly z: number };
 }
 
 /**
@@ -110,8 +113,26 @@ export type MissionPhase =
   | "RESCUE_ACTIVE"
   | "MISSION_COMPLETE";
 
+export interface SearchPlanState {
+  readonly pattern: "LAWNMOWER";
+  readonly active: boolean;
+  readonly paused: boolean;
+  readonly waypointIndex: number;
+  readonly waypoints: ReadonlyArray<Vec3>;
+}
+
+export interface InspectState {
+  readonly survivorId: string;
+  readonly holdTicksRemaining: number;
+  readonly transiting: boolean;
+}
+
 export interface MissionState {
   readonly phase: MissionPhase;
+  readonly search: SearchPlanState | null;
+  readonly inspect: InspectState | null;
+  readonly inspectQueue: ReadonlyArray<string>;
+  readonly cases: ReadonlyArray<HitlCase>;
 }
 
 export type SimulationEvent =
@@ -136,5 +157,11 @@ export interface SimulationCore {
   readonly takeoff: (targetAltitude?: number) => void;
   readonly flyTo: (target: Vec3) => void;
   readonly land: () => void;
+  /** Begin deterministic lawnmower search over the operational sector. */
+  readonly startGridSearch: () => void;
+  readonly abortSearch: () => void;
+  readonly approveCase: (survivorId: string) => void;
+  readonly rejectCase: (survivorId: string) => void;
+  readonly markFalsePositive: (survivorId: string) => void;
 }
 

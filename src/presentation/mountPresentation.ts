@@ -103,6 +103,49 @@ export function mountPresentation(
   trailLine.frustumCulled = false;
   scene.add(trailLine);
 
+  const MAX_SEARCH_POINTS = 64;
+  const searchPositions = new Float32Array(MAX_SEARCH_POINTS * 3);
+  const searchGeometry = new BufferGeometry();
+  searchGeometry.setAttribute("position", new BufferAttribute(searchPositions, 3));
+  searchGeometry.setDrawRange(0, 0);
+  const searchMaterial = new LineBasicMaterial({
+    color: 0xfbbf24,
+    transparent: true,
+    opacity: 0.55,
+  });
+  const searchLine = new Line(searchGeometry, searchMaterial);
+  searchLine.frustumCulled = false;
+  scene.add(searchLine);
+  let lastSearchSignature = "";
+  let lastRouteSignature = "";
+  const MAX_ROUTE_POINTS = 24;
+  const rescuePositions = new Float32Array(MAX_ROUTE_POINTS * 3);
+  const rescueGeometry = new BufferGeometry();
+  rescueGeometry.setAttribute("position", new BufferAttribute(rescuePositions, 3));
+  rescueGeometry.setDrawRange(0, 0);
+  const rescueMaterial = new LineBasicMaterial({
+    color: 0xf97316,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const rescueLine = new Line(rescueGeometry, rescueMaterial);
+  rescueLine.frustumCulled = false;
+  scene.add(rescueLine);
+
+  const evacPositions = new Float32Array(MAX_ROUTE_POINTS * 3);
+  const evacGeometry = new BufferGeometry();
+  evacGeometry.setAttribute("position", new BufferAttribute(evacPositions, 3));
+  evacGeometry.setDrawRange(0, 0);
+  const evacMaterial = new LineBasicMaterial({
+    color: 0x34d399,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const evacLine = new Line(evacGeometry, evacMaterial);
+  evacLine.frustumCulled = false;
+  scene.add(evacLine);
+  let lastRouteSignature = "";
+
   let lastTrailRecordTime = 0;
 
   const rendererStatus = document.querySelector("#status-renderer");
@@ -137,6 +180,84 @@ export function mountPresentation(
       const snap = getSnapshot();
       droneVisual.update(snap.drone, delta);
       disasterEnvironment.update(snap.world, delta);
+
+      const search = snap.mission.search;
+      const searchSignature = search
+        ? `${search.waypoints.length}:${search.active}`
+        : "";
+      if (searchSignature !== lastSearchSignature) {
+        lastSearchSignature = searchSignature;
+        if (search && search.waypoints.length > 0) {
+          const count = Math.min(search.waypoints.length, MAX_SEARCH_POINTS);
+          for (let i = 0; i < count; i++) {
+            const wp = search.waypoints[i];
+            if (!wp) {
+              continue;
+            }
+            searchPositions[i * 3] = wp.x;
+            searchPositions[i * 3 + 1] = wp.y;
+            searchPositions[i * 3 + 2] = wp.z;
+          }
+          const attr = searchGeometry.getAttribute("position");
+          attr.needsUpdate = true;
+          searchGeometry.setDrawRange(0, count);
+          searchGeometry.computeBoundingSphere();
+          searchLine.visible = true;
+        } else {
+          searchGeometry.setDrawRange(0, 0);
+          searchLine.visible = false;
+        }
+      }
+
+      const focusCase =
+        snap.mission.cases.find((c) => c.status === "PENDING") ??
+        snap.mission.cases.find((c) => c.status === "APPROVED") ??
+        null;
+      const routeSignature = focusCase
+        ? `${focusCase.survivorId}:${focusCase.status}:${focusCase.rescue.waypoints.length}`
+        : "";
+      if (routeSignature !== lastRouteSignature) {
+        lastRouteSignature = routeSignature;
+        const writeRoute = (
+          points: ReadonlyArray<{ readonly x: number; readonly z: number }>,
+          buffer: Float32Array,
+          geometry: BufferGeometry,
+          line: Line,
+        ): void => {
+          const count = Math.min(points.length, MAX_ROUTE_POINTS);
+          for (let i = 0; i < count; i++) {
+            const p = points[i];
+            if (!p) {
+              continue;
+            }
+            buffer[i * 3] = p.x;
+            buffer[i * 3 + 1] = 0.4;
+            buffer[i * 3 + 2] = p.z;
+          }
+          const attr = geometry.getAttribute("position");
+          attr.needsUpdate = true;
+          geometry.setDrawRange(0, count);
+          geometry.computeBoundingSphere();
+          line.visible = count > 1;
+        };
+        if (focusCase) {
+          writeRoute(
+            focusCase.rescue.waypoints,
+            rescuePositions,
+            rescueGeometry,
+            rescueLine,
+          );
+          writeRoute(
+            focusCase.evacuation.waypoints,
+            evacPositions,
+            evacGeometry,
+            evacLine,
+          );
+        } else {
+          rescueLine.visible = false;
+          evacLine.visible = false;
+        }
+      }
 
       const targetPos = new Vector3(
         snap.drone.position.x,
@@ -176,6 +297,12 @@ export function mountPresentation(
       disasterEnvironment.dispose();
       trailGeometry.dispose();
       trailMaterial.dispose();
+      searchGeometry.dispose();
+      searchMaterial.dispose();
+      rescueGeometry.dispose();
+      rescueMaterial.dispose();
+      evacGeometry.dispose();
+      evacMaterial.dispose();
       renderer.dispose();
       host.removeChild(renderer.domElement);
     },
