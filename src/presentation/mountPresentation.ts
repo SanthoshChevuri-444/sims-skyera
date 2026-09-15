@@ -144,7 +144,6 @@ export function mountPresentation(
   const evacLine = new Line(evacGeometry, evacMaterial);
   evacLine.frustumCulled = false;
   scene.add(evacLine);
-  let lastRouteSignature = "";
 
   let lastTrailRecordTime = 0;
 
