@@ -77,6 +77,17 @@ export interface StagingBase {
   readonly radius: number;
 }
 
+export interface RescueRoverState {
+  readonly active: boolean;
+  readonly position: Vec3;
+  readonly headingRadians: number;
+  readonly speed: number;
+  readonly targetSurvivorId: string | null;
+  readonly phase: "IDLE" | "TRANSIT_TO_CASUALTY" | "EVACUATING" | "DELIVERED";
+  readonly routeIndex: number;
+  readonly currentRoute: ReadonlyArray<{ readonly x: number; readonly z: number }>;
+}
+
 /**
  * World snapshot containing disaster environment, hazards, and survivors.
  */
@@ -92,6 +103,7 @@ export interface WorldState {
   readonly hazards: ReadonlyArray<HazardZone>;
   readonly stagingBase: StagingBase;
   readonly evacuationZone: { readonly x: number; readonly z: number };
+  readonly rescueRover: RescueRoverState;
 }
 
 /**
@@ -133,6 +145,7 @@ export interface MissionState {
   readonly inspect: InspectState | null;
   readonly inspectQueue: ReadonlyArray<string>;
   readonly cases: ReadonlyArray<HitlCase>;
+  readonly totalRescuedCount: number;
 }
 
 export type SimulationEvent =

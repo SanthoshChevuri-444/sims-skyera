@@ -152,7 +152,156 @@ function updateTelemetryUI(): void {
       btnApprove?.classList.add("btn-pulse");
     }
   }
+
+  // Update PiP camera HUD overlay
+  if (pipAltVal) {
+    pipAltVal.textContent = `ALT: ${drone.position.y.toFixed(1)}m`;
+  }
+
+  if (pipTargetBox && pipTargetLabel) {
+    if (snapshot.mission.inspect) {
+      pipTargetBox.classList.add("active");
+      pipTargetLabel.textContent = `LOCK: ${snapshot.mission.inspect.survivorId}`;
+    } else if (pending) {
+      pipTargetBox.classList.add("active");
+      pipTargetLabel.textContent = `LOCK: ${pending.survivorId}`;
+    } else {
+      pipTargetBox.classList.remove("active");
+    }
+  }
+
+  // Trigger Mission Complete Debrief Modal
+  if (
+    snapshot.mission.phase === "MISSION_COMPLETE" &&
+    debriefBackdrop?.classList.contains("modal-hidden") &&
+    !debriefDismissed
+  ) {
+    showDebriefModal(snapshot);
+  }
 }
+
+// Downward Gimbal Camera (PiP) Controls
+const pipContainer = document.querySelector<HTMLElement>("#pip-container");
+const btnPipMode = document.querySelector<HTMLButtonElement>("#btn-pip-mode");
+const pipAltVal = document.querySelector<HTMLElement>("#pip-alt-val");
+const pipTargetBox = document.querySelector<HTMLElement>("#pip-target-box");
+const pipTargetLabel = document.querySelector<HTMLElement>("#pip-target-label");
+
+let isThermal = false;
+btnPipMode?.addEventListener("click", () => {
+  isThermal = !isThermal;
+  if (isThermal) {
+    pipContainer?.classList.add("pip-thermal");
+    btnPipMode.textContent = "OPTICAL RGB";
+  } else {
+    pipContainer?.classList.remove("pip-thermal");
+    btnPipMode.textContent = "THERMAL IR";
+  }
+});
+
+// Mission Complete Debrief Modal Controls
+const debriefBackdrop = document.querySelector<HTMLElement>("#debrief-backdrop");
+const debriefTime = document.querySelector<HTMLElement>("#debrief-time");
+const debriefBattery = document.querySelector<HTMLElement>("#debrief-battery");
+const debriefCasualties = document.querySelector<HTMLElement>("#debrief-casualties");
+const debriefRecordsList = document.querySelector<HTMLElement>("#debrief-records-list");
+const btnExportDebrief = document.querySelector<HTMLButtonElement>("#btn-export-debrief");
+const btnResetSim = document.querySelector<HTMLButtonElement>("#btn-reset-sim");
+const btnCloseDebrief = document.querySelector<HTMLButtonElement>("#btn-close-debrief");
+
+let debriefDismissed = false;
+
+function showDebriefModal(snapshot: ReturnType<typeof core.getSnapshot>): void {
+  if (!debriefBackdrop) return;
+
+  const totalSec = Math.round(snapshot.clock.elapsedSeconds);
+  const mins = Math.floor(totalSec / 60).toString().padStart(2, "0");
+  const secs = (totalSec % 60).toString().padStart(2, "0");
+
+  if (debriefTime) {
+    debriefTime.textContent = `${mins}:${secs}`;
+  }
+  if (debriefBattery) {
+    debriefBattery.textContent = `${(100 - snapshot.drone.batteryPercent).toFixed(1)}%`;
+  }
+  if (debriefCasualties) {
+    debriefCasualties.textContent = `${snapshot.mission.totalRescuedCount} / ${snapshot.world.survivors.length}`;
+  }
+
+  if (debriefRecordsList) {
+    debriefRecordsList.innerHTML = snapshot.world.survivors
+      .map((s) => {
+        const pColor =
+          s.priority === "P1"
+            ? "var(--danger)"
+            : s.priority === "P2"
+            ? "var(--warn)"
+            : "var(--ok)";
+        return `
+          <div class="debrief-row">
+            <span><strong>${s.id}</strong> (${s.name})</span>
+            <span style="color: ${pColor}; font-weight: 700;">${s.priority} · ${s.vitalSigns.heartRateBpm} BPM / ${s.vitalSigns.temperatureC.toFixed(1)}°C</span>
+            <span style="color: var(--ok); font-weight: 600;">EVACUATED</span>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  debriefBackdrop.classList.remove("modal-hidden");
+}
+
+btnCloseDebrief?.addEventListener("click", () => {
+  debriefBackdrop?.classList.add("modal-hidden");
+  debriefDismissed = true;
+});
+
+btnResetSim?.addEventListener("click", () => {
+  core.reset();
+  presentation.resetCamera();
+  debriefBackdrop?.classList.add("modal-hidden");
+  debriefDismissed = false;
+});
+
+btnExportDebrief?.addEventListener("click", () => {
+  const snapshot = core.getSnapshot();
+  const report = {
+    missionTitle: "SKYERA Autonomous Drone Disaster Response Debrief",
+    sector: "Sector 7 Urban Industrial Complex",
+    timestamp: new Date().toISOString(),
+    telemetry: {
+      totalMissionDurationSeconds: snapshot.clock.elapsedSeconds,
+      droneFinalPosition: snapshot.drone.position,
+      batteryConsumedPercent: 100 - snapshot.drone.batteryPercent,
+    },
+    survivorTriageRecords: snapshot.world.survivors.map((s) => ({
+      id: s.id,
+      name: s.name,
+      location: s.position,
+      priority: s.priority,
+      vitals: s.vitalSigns,
+      operatorCaseStatus: s.operatorStatus,
+    })),
+    approvedRouteCases: snapshot.mission.cases.map((c) => ({
+      survivorId: c.survivorId,
+      priority: c.report.priority,
+      clinicalRationale: c.report.rationale,
+      rescueWaypointsCount: c.rescue.waypoints.length,
+      evacuationWaypointsCount: c.evacuation.waypoints.length,
+      operatorStatus: c.status,
+    })),
+  };
+
+  const blob = new Blob([JSON.stringify(report, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `skyera_mission_debrief_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
 
 const btnTakeoff = document.querySelector<HTMLButtonElement>("#btn-takeoff");
 btnTakeoff?.addEventListener("click", () => {

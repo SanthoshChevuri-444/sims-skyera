@@ -52,6 +52,23 @@ export function mountPresentation(
   renderer.toneMappingExposure = 1.2;
   host.appendChild(renderer.domElement);
 
+  // Dedicated downward gimbal camera & PiP renderer
+  const pipCanvas = document.querySelector<HTMLCanvasElement>("#pip-canvas");
+  let pipRenderer: WebGLRenderer | null = null;
+  let gimbalCamera: PerspectiveCamera | null = null;
+  if (pipCanvas) {
+    pipRenderer = new WebGLRenderer({
+      canvas: pipCanvas,
+      antialias: true,
+      powerPreference: "high-performance",
+    });
+    pipRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    pipRenderer.setSize(290, 175, false);
+    pipRenderer.toneMappingExposure = 1.2;
+
+    gimbalCamera = new PerspectiveCamera(65, 290 / 175, 0.1, 400);
+  }
+
   // OrbitControls for intuitive scene navigation
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -278,6 +295,27 @@ export function mountPresentation(
           trailGeometry.computeBoundingSphere();
         }
       }
+
+      // Render downward gimbal camera to PiP viewport
+      if (pipRenderer && gimbalCamera) {
+        const camY = Math.max(0.4, snap.drone.position.y - 0.15);
+        gimbalCamera.position.set(
+          snap.drone.position.x,
+          camY,
+          snap.drone.position.z,
+        );
+        gimbalCamera.lookAt(
+          snap.drone.position.x,
+          0,
+          snap.drone.position.z,
+        );
+        gimbalCamera.up.set(
+          Math.sin(snap.drone.headingRadians),
+          0,
+          Math.cos(snap.drone.headingRadians),
+        );
+        pipRenderer.render(scene, gimbalCamera);
+      }
     }
 
     controls.update();
@@ -302,6 +340,7 @@ export function mountPresentation(
       rescueMaterial.dispose();
       evacGeometry.dispose();
       evacMaterial.dispose();
+      pipRenderer?.dispose();
       renderer.dispose();
       host.removeChild(renderer.domElement);
     },

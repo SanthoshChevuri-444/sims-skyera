@@ -152,6 +152,16 @@ function initialSnapshot(): SimulationSnapshot {
       hazards: INITIAL_HAZARDS,
       stagingBase: INITIAL_STAGING_BASE,
       evacuationZone: INITIAL_EVACUATION_ZONE,
+      rescueRover: {
+        active: false,
+        position: { x: 0, y: 0, z: 0 },
+        headingRadians: 0,
+        speed: 0,
+        targetSurvivorId: null,
+        phase: "IDLE",
+        routeIndex: 0,
+        currentRoute: [],
+      },
     },
     drone: {
       position: { x: 0, y: 0, z: 0 },
@@ -174,6 +184,7 @@ function initialSnapshot(): SimulationSnapshot {
       inspect: null,
       inspectQueue: [],
       cases: [],
+      totalRescuedCount: 0,
     },
   };
 }
@@ -433,13 +444,18 @@ export function createSimulationCore(
         mission: {
           ...snapshot.mission,
           inspectQueue: queued,
-          phase: deriveMissionPhase(snapshot.mission, nextDrone),
+          phase: deriveMissionPhase(
+            snapshot.mission,
+            nextDrone,
+            snapshot.world,
+          ),
         },
       };
 
       tickInspection();
       maybeStartInspection();
       advanceGridSearchIfArrived();
+      tickRescueRover();
     },
     reset: () => {
       snapshot = initialSnapshot();
@@ -526,6 +542,7 @@ export function createSimulationCore(
       snapshot = {
         ...snapshot,
         mission: {
+          ...snapshot.mission,
           phase: "SEARCHING",
           search,
           inspect: null,
@@ -778,10 +795,32 @@ export function createSimulationCore(
     survivorId: string,
     status: Exclude<OperatorCaseStatus, "NONE">,
   ): void {
+    const approvedCase = snapshot.mission.cases.find(
+      (c) => c.survivorId === survivorId,
+    );
+    let nextRover = snapshot.world.rescueRover;
+    if (status === "APPROVED" && approvedCase) {
+      nextRover = {
+        active: true,
+        position: {
+          x: snapshot.world.stagingBase.position.x,
+          y: 0,
+          z: snapshot.world.stagingBase.position.z,
+        },
+        headingRadians: 0,
+        speed: 6.5,
+        targetSurvivorId: survivorId,
+        phase: "TRANSIT_TO_CASUALTY",
+        routeIndex: 0,
+        currentRoute: approvedCase.rescue.waypoints,
+      };
+    }
+
     snapshot = {
       ...snapshot,
       world: {
         ...snapshot.world,
+        rescueRover: nextRover,
         survivors: snapshot.world.survivors.map((s) =>
           s.id === survivorId ? { ...s, operatorStatus: status } : s,
         ),
@@ -791,10 +830,138 @@ export function createSimulationCore(
         cases: snapshot.mission.cases.map((c) =>
           c.survivorId === survivorId ? { ...c, status } : c,
         ),
-        phase:
-          status === "APPROVED" ? "ROUTE_GENERATED" : snapshot.mission.phase,
+        phase: status === "APPROVED" ? "RESCUE_ACTIVE" : snapshot.mission.phase,
       },
     };
+  }
+
+  function tickRescueRover(): void {
+    const rover = snapshot.world.rescueRover;
+    if (!rover.active || rover.currentRoute.length === 0) {
+      return;
+    }
+
+    const currentWp = rover.currentRoute[rover.routeIndex];
+    if (!currentWp) {
+      return;
+    }
+
+    const dx = currentWp.x - rover.position.x;
+    const dz = currentWp.z - rover.position.z;
+    const dist = Math.hypot(dx, dz);
+
+    if (dist < 0.6) {
+      if (rover.routeIndex + 1 < rover.currentRoute.length) {
+        snapshot = {
+          ...snapshot,
+          world: {
+            ...snapshot.world,
+            rescueRover: {
+              ...rover,
+              routeIndex: rover.routeIndex + 1,
+            },
+          },
+        };
+      } else {
+        if (rover.phase === "TRANSIT_TO_CASUALTY") {
+          const targetCase = snapshot.mission.cases.find(
+            (c) => c.survivorId === rover.targetSurvivorId,
+          );
+          if (targetCase) {
+            snapshot = {
+              ...snapshot,
+              world: {
+                ...snapshot.world,
+                rescueRover: {
+                  ...rover,
+                  phase: "EVACUATING",
+                  routeIndex: 0,
+                  currentRoute: targetCase.evacuation.waypoints,
+                },
+              },
+            };
+          }
+        } else if (rover.phase === "EVACUATING") {
+          const deliveredId = rover.targetSurvivorId;
+          const nextRescuedCount = snapshot.mission.totalRescuedCount + 1;
+          const allResolved =
+            nextRescuedCount >= snapshot.world.survivors.length;
+
+          const nextApproved = snapshot.mission.cases.find(
+            (c) => c.status === "APPROVED" && c.survivorId !== deliveredId,
+          );
+
+          if (nextApproved) {
+            snapshot = {
+              ...snapshot,
+              world: {
+                ...snapshot.world,
+                survivors: snapshot.world.survivors.map((s) =>
+                  s.id === deliveredId
+                    ? { ...s, operatorStatus: "RESOLVED" }
+                    : s,
+                ),
+                rescueRover: {
+                  ...rover,
+                  phase: "TRANSIT_TO_CASUALTY",
+                  routeIndex: 0,
+                  targetSurvivorId: nextApproved.survivorId,
+                  currentRoute: nextApproved.rescue.waypoints,
+                },
+              },
+              mission: {
+                ...snapshot.mission,
+                totalRescuedCount: nextRescuedCount,
+              },
+            };
+          } else {
+            snapshot = {
+              ...snapshot,
+              world: {
+                ...snapshot.world,
+                survivors: snapshot.world.survivors.map((s) =>
+                  s.id === deliveredId
+                    ? { ...s, operatorStatus: "RESOLVED" }
+                    : s,
+                ),
+                rescueRover: {
+                  ...rover,
+                  phase: "DELIVERED",
+                  active: false,
+                  currentRoute: [],
+                  targetSurvivorId: null,
+                },
+              },
+              mission: {
+                ...snapshot.mission,
+                totalRescuedCount: nextRescuedCount,
+                phase: allResolved
+                  ? "MISSION_COMPLETE"
+                  : snapshot.mission.phase,
+              },
+            };
+          }
+        }
+      }
+    } else {
+      const heading = Math.atan2(dx, dz);
+      const stepDist = Math.min(dist, rover.speed * FIXED_DELTA_SECONDS);
+      snapshot = {
+        ...snapshot,
+        world: {
+          ...snapshot.world,
+          rescueRover: {
+            ...rover,
+            position: {
+              x: rover.position.x + Math.sin(heading) * stepDist,
+              y: 0,
+              z: rover.position.z + Math.cos(heading) * stepDist,
+            },
+            headingRadians: heading,
+          },
+        },
+      };
+    }
   }
 
   function advanceGridSearchIfArrived(): void {
@@ -819,6 +986,8 @@ export function createSimulationCore(
           ...snapshot.mission,
           phase: snapshot.mission.cases.some((c) => c.status === "PENDING")
             ? "AWAITING_HUMAN_APPROVAL"
+            : snapshot.world.rescueRover.active
+            ? "RESCUE_ACTIVE"
             : "SEARCH_CONTINUING",
           search: { ...search, active: false, paused: false },
         },
@@ -846,15 +1015,27 @@ export function createSimulationCore(
 function deriveMissionPhase(
   mission: SimulationSnapshot["mission"],
   drone: DroneState,
+  world?: SimulationSnapshot["world"],
 ): SimulationSnapshot["mission"]["phase"] {
+  if (
+    mission.phase === "MISSION_COMPLETE" ||
+    (world &&
+      mission.totalRescuedCount >= world.survivors.length &&
+      world.survivors.length > 0)
+  ) {
+    return "MISSION_COMPLETE";
+  }
   if (mission.inspect) {
     return mission.inspect.transiting ? "ANOMALY_DETECTED" : "INSPECTING";
   }
-  if (mission.search?.active && !mission.search.paused) {
-    return "SEARCHING";
-  }
   if (mission.cases.some((c) => c.status === "PENDING")) {
     return "AWAITING_HUMAN_APPROVAL";
+  }
+  if (world?.rescueRover.active) {
+    return "RESCUE_ACTIVE";
+  }
+  if (mission.search?.active && !mission.search.paused) {
+    return "SEARCHING";
   }
   if (drone.flightMode === "TAKEOFF") {
     return "TAKEOFF";

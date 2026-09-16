@@ -21,7 +21,8 @@ export type OperatorCaseStatus =
   | "PENDING"
   | "APPROVED"
   | "REJECTED"
-  | "FALSE_POSITIVE";
+  | "FALSE_POSITIVE"
+  | "RESOLVED";
 
 export interface OperatorDecision {
   readonly survivorId: string;

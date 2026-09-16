@@ -351,6 +351,115 @@ export function createDisasterEnvironment(): DisasterEnvironmentHandle {
     });
   };
 
+  // 3D First Responder Ground Rescue Rover Model
+  const roverGroup = new Group();
+  root.add(roverGroup);
+
+  const roverChassisMat = new MeshStandardMaterial({
+    color: 0xea580c, // High-visibility SAR Emergency Orange
+    roughness: 0.4,
+    metalness: 0.3,
+  });
+
+  const roverCabinMat = new MeshStandardMaterial({
+    color: 0x1e293b, // Tactical carbon graphite
+    roughness: 0.5,
+    metalness: 0.5,
+  });
+
+  const roverGlassMat = new MeshStandardMaterial({
+    color: 0x38bdf8,
+    roughness: 0.1,
+    metalness: 0.9,
+    transparent: true,
+    opacity: 0.75,
+  });
+
+  const wheelMat = new MeshStandardMaterial({
+    color: 0x0f172a,
+    roughness: 0.9,
+    metalness: 0.1,
+  });
+
+  // Rover Chassis Base
+  const chassis = new Mesh(new BoxGeometry(1.6, 0.42, 2.5), roverChassisMat);
+  chassis.position.y = 0.46;
+  roverGroup.add(chassis);
+
+  // Armored Cabin
+  const cabin = new Mesh(new BoxGeometry(1.3, 0.45, 1.5), roverCabinMat);
+  cabin.position.set(0, 0.82, -0.2);
+  roverGroup.add(cabin);
+
+  // Front Windshield
+  const windshield = new Mesh(new BoxGeometry(1.2, 0.3, 0.08), roverGlassMat);
+  windshield.position.set(0, 0.82, 0.58);
+  windshield.rotation.x = -0.2;
+  roverGroup.add(windshield);
+
+  // 6 All-Terrain Rubber Wheels
+  const wheelGeom = new CylinderGeometry(0.36, 0.36, 0.28, 16);
+  const wheels: Mesh[] = [];
+  const wheelOffsets = [
+    { x: -0.92, z: -0.8 },
+    { x: -0.92, z: 0.0 },
+    { x: -0.92, z: 0.8 },
+    { x: 0.92, z: -0.8 },
+    { x: 0.92, z: 0.0 },
+    { x: 0.92, z: 0.8 },
+  ];
+
+  wheelOffsets.forEach((pos) => {
+    const w = new Mesh(wheelGeom, wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(pos.x, 0.36, pos.z);
+    roverGroup.add(w);
+    wheels.push(w);
+  });
+
+  // Emergency Strobe Lightbar on Roof
+  const lightBarMount = new Mesh(
+    new BoxGeometry(0.8, 0.06, 0.16),
+    new MeshBasicMaterial({ color: 0x334155 }),
+  );
+  lightBarMount.position.set(0, 1.07, -0.2);
+  roverGroup.add(lightBarMount);
+
+  const redStrobeMat = new MeshBasicMaterial({
+    color: 0xef4444,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const redStrobe = new Mesh(new BoxGeometry(0.3, 0.1, 0.14), redStrobeMat);
+  redStrobe.position.set(-0.25, 1.13, -0.2);
+  roverGroup.add(redStrobe);
+
+  const blueStrobeMat = new MeshBasicMaterial({
+    color: 0x3b82f6,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const blueStrobe = new Mesh(new BoxGeometry(0.3, 0.1, 0.14), blueStrobeMat);
+  blueStrobe.position.set(0.25, 1.13, -0.2);
+  roverGroup.add(blueStrobe);
+
+  // Front Headlights
+  const headlightMat = new MeshBasicMaterial({ color: 0xffedd5 });
+  const headL = new Mesh(new BoxGeometry(0.2, 0.12, 0.05), headlightMat);
+  headL.position.set(-0.55, 0.46, 1.27);
+  roverGroup.add(headL);
+  const headR = new Mesh(new BoxGeometry(0.2, 0.12, 0.05), headlightMat);
+  headR.position.set(0.55, 0.46, 1.27);
+  roverGroup.add(headR);
+
+  // Rotating LiDAR / Sensor Dome
+  const lidarDome = new Mesh(
+    new CylinderGeometry(0.18, 0.18, 0.12, 16),
+    new MeshStandardMaterial({ color: 0x0284c7, roughness: 0.2 }),
+  );
+  lidarDome.position.set(0, 1.15, 0.35);
+  roverGroup.add(lidarDome);
+
   let pulseTimer = 0;
 
   return {
@@ -361,6 +470,25 @@ export function createDisasterEnvironment(): DisasterEnvironmentHandle {
       if (!evacPlaced) {
         evacGroup.position.set(world.evacuationZone.x, 0, world.evacuationZone.z);
         evacPlaced = true;
+      }
+
+      // Synchronize Ground Rescue Rover position and heading
+      if (world.rescueRover) {
+        const rover = world.rescueRover;
+        roverGroup.position.set(rover.position.x, 0, rover.position.z);
+        roverGroup.rotation.y = rover.headingRadians;
+
+        if (rover.active) {
+          wheels.forEach((w) => {
+            w.rotation.x += rover.speed * delta * 2.5;
+          });
+          const flash = Math.sin(pulseTimer * 16);
+          redStrobeMat.opacity = flash > 0 ? 0.95 : 0.15;
+          blueStrobeMat.opacity = flash < 0 ? 0.95 : 0.15;
+        } else {
+          redStrobeMat.opacity = 0.25;
+          blueStrobeMat.opacity = 0.25;
+        }
       }
 
       world.hazards.forEach((hazard) => {
@@ -386,6 +514,14 @@ export function createDisasterEnvironment(): DisasterEnvironmentHandle {
       damagedConcreteMaterial.dispose();
       rubbleMaterial.dispose();
       helipadRingMaterial.dispose();
+      roverChassisMat.dispose();
+      roverCabinMat.dispose();
+      roverGlassMat.dispose();
+      wheelMat.dispose();
+      wheelGeom.dispose();
+      redStrobeMat.dispose();
+      blueStrobeMat.dispose();
+      headlightMat.dispose();
     },
   };
 }
