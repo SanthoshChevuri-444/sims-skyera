@@ -799,7 +799,8 @@ export function createSimulationCore(
       (c) => c.survivorId === survivorId,
     );
     let nextRover = snapshot.world.rescueRover;
-    if (status === "APPROVED" && approvedCase) {
+    // Only dispatch from staging if the rover is currently idle
+    if (status === "APPROVED" && approvedCase && !nextRover.active) {
       nextRover = {
         active: true,
         position: {
@@ -887,11 +888,32 @@ export function createSimulationCore(
           const allResolved =
             nextRescuedCount >= snapshot.world.survivors.length;
 
-          const nextApproved = snapshot.mission.cases.find(
-            (c) => c.status === "APPROVED" && c.survivorId !== deliveredId,
+          // Find next approved case that is not yet delivered/resolved
+          const nextApproved = snapshot.mission.cases.find((c) => {
+            if (c.status !== "APPROVED" || c.survivorId === deliveredId) {
+              return false;
+            }
+            const s = snapshot.world.survivors.find((surv) => surv.id === c.survivorId);
+            return s && s.operatorStatus !== "RESOLVED";
+          });
+
+          // Mark delivered case as RESOLVED in mission cases
+          const updatedCases = snapshot.mission.cases.map((c) =>
+            c.survivorId === deliveredId ? { ...c, status: "RESOLVED" as const } : c,
           );
 
           if (nextApproved) {
+            const nextSurv = snapshot.world.survivors.find(
+              (s) => s.id === nextApproved.survivorId,
+            );
+            const transitRoute = nextSurv
+              ? planRescueRoute(
+                  { x: rover.position.x, z: rover.position.z },
+                  nextSurv.position,
+                  snapshot.world.hazards,
+                ).waypoints
+              : nextApproved.rescue.waypoints;
+
             snapshot = {
               ...snapshot,
               world: {
@@ -906,11 +928,12 @@ export function createSimulationCore(
                   phase: "TRANSIT_TO_CASUALTY",
                   routeIndex: 0,
                   targetSurvivorId: nextApproved.survivorId,
-                  currentRoute: nextApproved.rescue.waypoints,
+                  currentRoute: transitRoute,
                 },
               },
               mission: {
                 ...snapshot.mission,
+                cases: updatedCases,
                 totalRescuedCount: nextRescuedCount,
               },
             };
@@ -928,12 +951,14 @@ export function createSimulationCore(
                   ...rover,
                   phase: "DELIVERED",
                   active: false,
+                  speed: 0,
                   currentRoute: [],
                   targetSurvivorId: null,
                 },
               },
               mission: {
                 ...snapshot.mission,
+                cases: updatedCases,
                 totalRescuedCount: nextRescuedCount,
                 phase: allResolved
                   ? "MISSION_COMPLETE"
